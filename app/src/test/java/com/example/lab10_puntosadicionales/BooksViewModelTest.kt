@@ -33,4 +33,12 @@ class BooksViewModelTest {
   advanceUntilIdle();vm.search("lenta");runCurrent();vm.search("rapida");advanceUntilIdle()
   assertEquals("rapida",vm.state.value.query);assertEquals("rapida",vm.state.value.books.single().id)
  }
+ @Test fun catalogoEsUnaEleccionExplicitaYSePuedeVolverALaApi()=runTest(dispatcher) {
+  val vm=BooksViewModel(
+   object:BooksRepository {override suspend fun search(query:String)=listOf(book("api"))},
+   object:BooksRepository {override suspend fun search(query:String)=listOf(book("ejemplo"))})
+  advanceUntilIdle();assertFalse(vm.state.value.exampleMode)
+  vm.openExamples();advanceUntilIdle();assertTrue(vm.state.value.exampleMode);assertEquals("ejemplo",vm.state.value.books.single().id)
+  vm.returnToApi();advanceUntilIdle();assertFalse(vm.state.value.exampleMode);assertEquals("api",vm.state.value.books.single().id)
+ }
 }

@@ -19,20 +19,24 @@ data class BooksState(
     val books:List<Book> = emptyList(),
     val error:String?=null,
     val selected:Book?=null,
+    val exampleMode:Boolean=false,
 )
-class BooksViewModel(private val repository:BooksRepository=BooksContainer.repository):ViewModel() {
+class BooksViewModel(private val repository:BooksRepository=BooksContainer.repository,private val examples:BooksRepository=ExampleCatalogContainer.repository):ViewModel() {
     private val mutable=MutableStateFlow(BooksState())
     val state=mutable.asStateFlow()
     private var searchJob:Job?=null
     init {search()}
     fun draft(value:String) {mutable.update {it.copy(draft=value)}}
+    fun openExamples() {mutable.update {it.copy(exampleMode=true,books=emptyList(),query="",draft="",selected=null)};search("")}
+    fun returnToApi() {mutable.update {it.copy(exampleMode=false,books=emptyList(),query="",draft="kotlin",selected=null)};search("kotlin")}
     fun search(term:String=mutable.value.draft) {
-        if(term.isBlank()) {mutable.update {it.copy(error="Escribe un título, autor o tema para buscar.")};return}
+        if(term.isBlank() && !mutable.value.exampleMode) {mutable.update {it.copy(error="Escribe un título, autor o tema para buscar.")};return}
         searchJob?.cancel()
         mutable.update {it.copy(loading=true,error=null,draft=term,selected=null)}
+        val selectedRepository=if(mutable.value.exampleMode) examples else repository
         searchJob=viewModelScope.launch {
             try {
-                val books=repository.search(term)
+                val books=selectedRepository.search(term)
                 mutable.update {it.copy(loading=false,books=books,query=term,error=null)}
             } catch(e:CancellationException) {throw e}
             catch(e:Exception) {mutable.update {it.copy(loading=false,error=networkMessage(e))}}

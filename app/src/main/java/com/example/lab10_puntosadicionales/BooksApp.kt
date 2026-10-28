@@ -55,13 +55,13 @@ fun BooksApp(vm:BooksViewModel=viewModel()) {
    colors=TopAppBarDefaults.topAppBarColors(containerColor=MaterialTheme.colorScheme.background))}) {padding ->
     Box(Modifier.fillMaxSize().padding(padding),contentAlignment=Alignment.TopCenter) {
      Box(Modifier.widthIn(max=1000.dp).fillMaxSize()) {
-      s.selected?.let {BookDetail(it)} ?: Library(s,vm::draft,{vm.search()},{vm.search(it)},vm::select)
+      s.selected?.let {BookDetail(it,s.exampleMode)} ?: Library(s,vm::draft,{vm.search()},{vm.search(it)},vm::select,vm::openExamples,vm::returnToApi)
      }
     }
    }
  }
 }
-@Composable private fun Library(s:BooksState,change:(String)->Unit,search:()->Unit,topic:(String)->Unit,select:(Book)->Unit) {
+@Composable private fun Library(s:BooksState,change:(String)->Unit,search:()->Unit,topic:(String)->Unit,select:(Book)->Unit,examples:()->Unit,returnToApi:()->Unit) {
  val focus=LocalFocusManager.current;val keyboard=LocalSoftwareKeyboardController.current
  val submit={focus.clearFocus();keyboard?.hide();search()}
  val grid=rememberLazyGridState()
@@ -69,10 +69,17 @@ fun BooksApp(vm:BooksViewModel=viewModel()) {
  LazyVerticalGrid(columns=GridCells.Adaptive(150.dp),state=grid,modifier=Modifier.fillMaxSize().testTag("booksGrid"),contentPadding=PaddingValues(24.dp),horizontalArrangement=Arrangement.spacedBy(18.dp),verticalArrangement=Arrangement.spacedBy(24.dp)) {
   item(span={GridItemSpan(maxLineSpan)}) {
    Column(verticalArrangement=Arrangement.spacedBy(12.dp)) {
+    if(s.exampleMode) Surface(color=MaterialTheme.colorScheme.secondaryContainer,shape=RoundedCornerShape(14.dp)) {
+     Column(Modifier.padding(16.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
+      Text("Catálogo de ejemplo",fontWeight=FontWeight.Bold)
+      Text("Títulos locales y portadas consultadas por ISBN en Google Books. La API REST tiene la cuota agotada.",style=MaterialTheme.typography.bodyMedium)
+      TextButton(onClick=returnToApi,enabled=!s.loading) {Text("Volver a la búsqueda de la API")}
+     }
+    }
     Text("TU PRÓXIMA LECTURA",color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.labelMedium,letterSpacing=2.sp)
     Text("Un libro puede\ncambiar tu día.",style=MaterialTheme.typography.headlineLarge)
     Text("Explora títulos, autores y nuevas ideas.",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodyLarge)
-    OutlinedTextField(value=s.draft,onValueChange=change,singleLine=true,label={Text("Título, autor o tema")},leadingIcon={Icon(Icons.Default.Search,null)},
+    OutlinedTextField(value=s.draft,onValueChange=change,singleLine=true,label={Text(if(s.exampleMode) "Buscar en el catálogo de ejemplo" else "Título, autor o tema")},leadingIcon={Icon(Icons.Default.Search,null)},
      trailingIcon={if(s.draft.isNotEmpty()) IconButton(onClick={change("")}) {Icon(Icons.Default.Close,"Limpiar búsqueda")}},modifier=Modifier.fillMaxWidth(),shape=RoundedCornerShape(14.dp),keyboardOptions=KeyboardOptions(imeAction=ImeAction.Search),keyboardActions=KeyboardActions(onSearch={submit()}))
     Button(onClick=submit,enabled=!s.loading,modifier=Modifier.fillMaxWidth().heightIn(min=50.dp),shape=RoundedCornerShape(14.dp)) {Text(if(s.loading) "Buscando libros…" else "Buscar libros")}
     Row(horizontalArrangement=Arrangement.spacedBy(8.dp),modifier=Modifier.fillMaxWidth()) {
@@ -88,18 +95,19 @@ fun BooksApp(vm:BooksViewModel=viewModel()) {
     Column(Modifier.padding(20.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
      Icon(Icons.Default.Info,null);Text("No pudimos cargar los libros",style=MaterialTheme.typography.titleLarge);Text(message,style=MaterialTheme.typography.bodyMedium)
      OutlinedButton(onClick=search,enabled=!s.loading) {Icon(Icons.Default.Refresh,null);Spacer(Modifier.width(8.dp));Text("Reintentar")}
+     if(!s.exampleMode) TextButton(onClick=examples,enabled=!s.loading) {Text("Abrir catálogo de ejemplo")}
     }
    }
   }}
-  if(s.query.isNotEmpty()) item(span={GridItemSpan(maxLineSpan)}) {
+  if(s.query.isNotEmpty() || s.exampleMode) item(span={GridItemSpan(maxLineSpan)}) {
    Column(verticalArrangement=Arrangement.spacedBy(4.dp)) {
-    Text("Resultados para «${s.query}»",style=MaterialTheme.typography.titleLarge)
-    Text("${s.books.size} libros · Google Books",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodyMedium)
+    Text(if(s.query.isEmpty()) "Selección de ejemplo" else "Resultados para «${s.query}»",style=MaterialTheme.typography.titleLarge)
+    Text("${s.books.size} ${if(s.books.size==1) "libro" else "libros"} · ${if(s.exampleMode) "Catálogo de ejemplo" else "Google Books"}",color=MaterialTheme.colorScheme.onSurfaceVariant,style=MaterialTheme.typography.bodyMedium)
    }
   }
-  if(!s.loading && s.error==null && s.query.isNotEmpty() && s.books.isEmpty()) item(span={GridItemSpan(maxLineSpan)}) {Text("No encontramos libros con esa búsqueda. Prueba otro título, autor o tema.",style=MaterialTheme.typography.bodyLarge)}
+  if(!s.loading && s.error==null && (s.query.isNotEmpty() || s.exampleMode) && s.books.isEmpty()) item(span={GridItemSpan(maxLineSpan)}) {Text("No encontramos libros con esa búsqueda. Prueba otro título, autor o tema.",style=MaterialTheme.typography.bodyLarge)}
   items(s.books,key={it.id}) {book -> BookCard(book) {select(book)} }
-  item(span={GridItemSpan(maxLineSpan)}) {Text("Información y portadas de Google Books.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
+  item(span={GridItemSpan(maxLineSpan)}) {Text(if(s.exampleMode) "Datos de ejemplo. Portadas y enlaces de Google Books." else "Información y portadas de Google Books.",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)}
  }
 }
 @Composable private fun BookCard(book:Book,onClick:()->Unit) {
@@ -123,9 +131,10 @@ fun BooksApp(vm:BooksViewModel=viewModel()) {
   }
  }
 }
-@Composable private fun BookDetail(book:Book) {
+@Composable private fun BookDetail(book:Book,exampleMode:Boolean) {
  val uri=LocalUriHandler.current
  Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),verticalArrangement=Arrangement.spacedBy(20.dp)) {
+  if(exampleMode) Text("Catálogo de ejemplo · Portada de Google Books",color=MaterialTheme.colorScheme.secondary,style=MaterialTheme.typography.labelLarge)
   Box(Modifier.fillMaxWidth(),contentAlignment=Alignment.Center) {Cover(book,Modifier.widthIn(max=240.dp).fillMaxWidth(.65f).aspectRatio(.68f))}
   Text(book.title,style=MaterialTheme.typography.headlineLarge)
   Text(book.authors,style=MaterialTheme.typography.bodyLarge,color=MaterialTheme.colorScheme.primary)
@@ -134,6 +143,6 @@ fun BooksApp(vm:BooksViewModel=viewModel()) {
   HorizontalDivider(color=MaterialTheme.colorScheme.outlineVariant)
   Text("Sobre este libro",style=MaterialTheme.typography.titleLarge)
   Text(remember(book.description) {HtmlCompat.fromHtml(book.description,HtmlCompat.FROM_HTML_MODE_LEGACY).toString().trim()},style=MaterialTheme.typography.bodyLarge)
-  OutlinedButton(onClick={uri.openUri("https://books.google.com/books?id=${android.net.Uri.encode(book.id)}")},modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)) {Text("Ver en Google Books")}
+  OutlinedButton(onClick={uri.openUri(if(book.id.startsWith("ISBN:")) "https://books.google.com/books?vid=${android.net.Uri.encode(book.id)}" else "https://books.google.com/books?id=${android.net.Uri.encode(book.id)}")},modifier=Modifier.fillMaxWidth().heightIn(min=52.dp)) {Text("Ver en Google Books")}
  }
 }
